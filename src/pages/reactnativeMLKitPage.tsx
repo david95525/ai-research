@@ -1,59 +1,71 @@
-import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import {
-  Camera,
-  useCameraDevice,
-  useFrameProcessor,
-} from "react-native-vision-camera";
-import { Worklets, useSharedValue } from "react-native-worklets-core";
-import { runOCR } from "./OCRService";
+import React, { useEffect, useRef, useState } from "react";
+import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { Camera, useCameraDevice } from "react-native-vision-camera";
+import TextRecognition from "@react-native-ml-kit/text-recognition";
+
 export const ReactNativeMLKitPage = () => {
   const [hasPermission, setHasPermission] = useState(false);
   const [recognizedText, setRecognizedText] = useState("");
   const device = useCameraDevice("back");
-  const lastProcessed = useSharedValue(0);
+  const cameraRef = useRef<Camera>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    Camera.requestCameraPermission().then((res) => {
-      setHasPermission(res === "granted");
-    });
+    (async () => {
+      const status = await Camera.requestCameraPermission();
+      setHasPermission(status === "granted");
+    })();
   }, []);
 
-  const processOCR = Worklets.createRunOnJS(async (frame: any) => {
-    try {
-      const text = await runOCR(frame);
-      setRecognizedText(text);
-    } catch (err) {
-      setRecognizedText("OCR failed: " + String(err));
-    }
-  });
+  const takePhotoAndRecognize = async () => {
+    if (!cameraRef.current || isProcessing) return;
 
-  const frameProcessor = useFrameProcessor(
-    (frame) => {
-      "worklet";
-      const now = Date.now();
-      if (now - lastProcessed.value < 1000) return;
-      lastProcessed.value = now;
-      processOCR(frame);
-    },
-    [processOCR]
-  );
+    try {
+      setIsProcessing(true);
+
+      // 拍照
+      const photo = await cameraRef.current.takePhoto();
+
+      // OCR 辨識
+      const result = await TextRecognition.recognize(`file://${photo.path}`);
+      const allText = result.blocks.map((b) => b.text).join("\n");
+
+      setRecognizedText(allText || "(沒有辨識到文字)");
+    } catch (err) {
+      console.error("OCR failed:", err);
+      setRecognizedText("辨識失敗：" + String(err));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   if (!device || !hasPermission) {
-    return <Text>相機初始化中...</Text>;
+    return <Text style={styles.loadingText}>相機初始化中...</Text>;
   }
 
   return (
     <View style={styles.container}>
       <Camera
+        ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={true}
-        frameProcessor={frameProcessor}
+        photo={true}
       />
       <View style={styles.overlay}>
-        <Text style={styles.ocrText}>辨識結果：</Text>
-        <Text style={styles.ocrResult}>{recognizedText}</Text>
+        <TouchableOpacity
+          style={[styles.button, isProcessing && styles.buttonDisabled]}
+          onPress={takePhotoAndRecognize}
+          disabled={isProcessing}
+        >
+          <Text style={styles.buttonText}>
+            {isProcessing ? "辨識中..." : "拍照並辨識"}
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.resultBox}>
+          <Text style={styles.ocrText}>辨識結果：</Text>
+          <Text style={styles.ocrResult}>{recognizedText}</Text>
+        </View>
       </View>
     </View>
   );
@@ -61,12 +73,36 @@ export const ReactNativeMLKitPage = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loadingText: {
+    flex: 1,
+    textAlign: "center",
+    textAlignVertical: "center",
+    fontSize: 16,
+  },
   overlay: {
     position: "absolute",
     bottom: 0,
     backgroundColor: "rgba(0,0,0,0.6)",
     padding: 12,
     width: "100%",
+  },
+  button: {
+    backgroundColor: "#2196F3",
+    paddingVertical: 10,
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: "#888",
+  },
+  buttonText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  resultBox: {
+    maxHeight: 200,
   },
   ocrText: {
     color: "#fff",
