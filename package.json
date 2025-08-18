@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "setup-camera": "expo install react-native-vision-camera && expo prebuild",
+    "setup": "expo install react-native-vision-camera && expo prebuild",
     "clean": "cd android && ./gradlew clean && cd ..",
     "start": "expo start --dev-client",
     "android": "expo run:android",
@@ -20,9 +20,12 @@
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
     "react-native": "0.79.5",
+    "react-native-fast-tflite": "^1.6.1",
+    "react-native-reanimated": "3.19.1",
     "react-native-safe-area-context": "5.4.0",
     "react-native-vision-camera": "^4.7.1",
-    "react-native-worklets-core": "^1.6.2"
+    "react-native-worklets-core": "^1.6.2",
+    "vision-camera-resize-plugin": "^3.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

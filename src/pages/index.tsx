@@ -1,2 +1,3 @@
 export * from "./homePage";
-export * from "./reactnativeMLKitPage";
+export * from "./MLKitPage";
+export * from "./FastTFLitePage"

@@ -1,4 +1,4 @@
-import { HomePage, ReactNativeMLKitPage } from "../pages/index";
+import { HomePage, ReactNativeMLKitPage, FastTFLitePage } from "../pages/index";
 //  ReactNativeMLKitPage
 import { NavigationContainer } from "@react-navigation/native";
 import type { BottomTabNavigationOptions } from "@react-navigation/bottom-tabs";
@@ -28,6 +28,9 @@ export function getTabScreenOptions(
         case "MLKitPage":
           iconName = "text-recognition";
           break;
+        case "FastTFLitePage":
+          iconName = "scan-helper";
+          break;
         default:
           iconName = "circle";
       }
@@ -49,6 +52,7 @@ export function CustomBottomTabNavigator() {
       >
         <Tab.Screen name="Home" component={HomePage} />
         <Tab.Screen name="MLKitPage" component={ReactNativeMLKitPage} />
+        <Tab.Screen name="FastTFLitePage" component={FastTFLitePage} />
       </Tab.Navigator>
     </NavigationContainer>
   );
