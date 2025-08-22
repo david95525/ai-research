@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
-import { runOCR } from '../services/aiService';
+import { runOCR } from '../services/scanService';
 
 export const ReactNativeMLKitPage = () => {
   const [hasPermission, setHasPermission] = useState(false);

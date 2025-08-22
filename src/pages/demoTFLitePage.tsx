@@ -2,36 +2,33 @@ import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 import { useSharedValue } from 'react-native-reanimated';
-import { Camera, useCameraDevice, useFrameProcessor, PhotoFile } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
-import { loadLabels, predictImageRN, caculateScale } from '../services/scanService';
 import { useResizePlugin } from 'vision-camera-resize-plugin';
 
-export const FastTFLitePage = () => {
+export const DemoTFLitePage = () => {
   const device = useCameraDevice('back');
   const [hasPermission, setHasPermission] = useState(false);
-  const [results, setResults] = useState<{ label: string; prob: number; box?: number[] }[]>([]);
+  const [results, setResults] = useState<
+    {
+      width: number | bigint;
+      height: number | bigint;
+      detection_scores: number | bigint;
+      classes: number | bigint;
+    }[]
+  >([]);
+  const [numdetections, setNumdetections] = useState<number | bigint>(0);
   const [scanStatus, setScanStatus] = useState('');
-  const labels = useSharedValue<string[]>([]);
   const modelRef = useSharedValue<TensorflowModel | null>(null);
   const scanning = useSharedValue(true);
-
-  // 加載標籤
-  useEffect(() => {
-    (async () => {
-      const lbls = await loadLabels();
-      labels.value = lbls;
-    })();
-  }, []);
 
   // 相機權限與模型
   useEffect(() => {
     (async () => {
       const cameraPermission = await Camera.requestCameraPermission();
       setHasPermission(cameraPermission === 'granted');
-
       try {
-        const loadedModel = await loadTensorflowModel({ url: 'model' });
+        const loadedModel = await loadTensorflowModel({ url: 'demo' });
         modelRef.value = loadedModel;
       } catch (err) {
         console.error('模型載入失敗', err);
@@ -43,8 +40,8 @@ export const FastTFLitePage = () => {
     setResults(res);
   });
 
-  const onScanStatus = Worklets.createRunOnJS((status: string) => {
-    setScanStatus(status);
+  const onSetNumdetections = Worklets.createRunOnJS((num: number | bigint) => {
+    setNumdetections(num);
   });
   const { resize } = useResizePlugin();
   // frameProcessor 僅在掃描中啟用
@@ -54,27 +51,49 @@ export const FastTFLitePage = () => {
       try {
         if (!scanning.value) return;
         const model = modelRef.value;
-        if (!model || labels.value.length === 0) return;
-
-        const scale = caculateScale(frame);
-
-        const tensorData = resize(frame, {
-          scale: { width: 416, height: 416 },
+        if (model == null) return;
+        const resized = resize(frame, {
+          scale: {
+            width: 192,
+            height: 192,
+          },
           pixelFormat: 'rgb',
-          dataType: 'float32',
+          dataType: 'uint8',
         });
-        const outputshape = model.outputs[0].shape.slice(1);
-        const result = predictImageRN(model, labels.value, tensorData, outputshape, 0.1, 20);
-
-        onInferenceResult(result);
-        onScanStatus('掃描完成');
+        const outputs = model.runSync([resized]);
+        // 轉成陣列
+        const detection_boxes = Object.values(outputs[0]);
+        const detection_classes = Object.values(outputs[1]);
+        const detection_scores = Object.values(outputs[2]);
+        const num_detections = outputs[3];
+        const selected: {
+          width: number | bigint;
+          height: number | bigint;
+          detection_scores: number | bigint;
+          classes: number | bigint;
+        }[] = [];
+        for (let i = 0; i < detection_boxes.length; i += 4) {
+          const confidence = detection_scores[i / 4];
+          const classes = detection_classes[i / 4];
+          if (confidence > 0.5) {
+            const left = detection_boxes[i];
+            const top = detection_boxes[i + 1];
+            const right = detection_boxes[i + 2];
+            const bottom = detection_boxes[i + 3];
+            const height = bottom - top;
+            const width = right - left;
+            selected.push({ height: height, width: width, detection_scores: confidence, classes: classes });
+          }
+        }
+        onInferenceResult(selected);
+        onSetNumdetections(num_detections[0]);
         scanning.value = false;
       } catch (e) {
         scanning.value = false;
         console.error(e);
       }
     },
-    [labels, modelRef],
+    [modelRef],
   );
 
   // 開始即時掃描
@@ -95,9 +114,10 @@ export const FastTFLitePage = () => {
       />
       <View style={styles.overlay}>
         <Text style={styles.status}>{scanStatus}</Text>
+        <Text style={styles.status}>Detected {numdetections} objects</Text>
         {results.map((r, idx) => (
           <Text key={idx} style={styles.result}>
-            {r.label} ({(r.prob * 100).toFixed(1)}%)
+            height:{r.height},width:{r.width},confidence:{r.detection_scores},classes:{r.classes}
           </Text>
         ))}
       </View>
