@@ -7,7 +7,7 @@ import { Worklets } from 'react-native-worklets-core';
 import { loadLabels, predictImageRN, caculateScale } from '../services/scanService';
 import { useResizePlugin } from 'vision-camera-resize-plugin';
 
-export const FastTFLitePage = () => {
+export const ScanTFLitePage = () => {
   const device = useCameraDevice('back');
   const [hasPermission, setHasPermission] = useState(false);
   const [results, setResults] = useState<{ label: string; prob: number; box?: number[] }[]>([]);
@@ -57,7 +57,6 @@ export const FastTFLitePage = () => {
         if (!model || labels.value.length === 0) return;
 
         const scale = caculateScale(frame);
-
         const tensorData = resize(frame, {
           scale: { width: 416, height: 416 },
           pixelFormat: 'rgb',
@@ -65,7 +64,7 @@ export const FastTFLitePage = () => {
         });
         const outputshape = model.outputs[0].shape.slice(1);
         const result = predictImageRN(model, labels.value, tensorData, outputshape, 0.1, 20);
-
+        console.log(result);
         onInferenceResult(result);
         onScanStatus('掃描完成');
         scanning.value = false;

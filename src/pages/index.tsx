@@ -1,4 +1,5 @@
 export * from './homePage';
 export * from './MLKitPage';
-export * from './FastTFLitePage';
+export * from './ScanTFLitePage';
 export * from './demoTFLitePage';
+export * from './TestPage';
