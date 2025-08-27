@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Button, StyleSheet, Text, View } from 'react-native';
 import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 import { useSharedValue } from 'react-native-reanimated';
-import { loadLabels, predictImageRN, preprocessLocalImage, copyAssetToDocDir } from '../services/scanService';
+import { loadLabels, predictImageRN, preprocessLocalImage } from '../services/index';
 export const TestTFLitePage = () => {
   const [results, setResults] = useState<{ label: string; prob: number; box?: number[] }[]>([]);
   const labels = useSharedValue<string[]>([]);
@@ -28,11 +28,9 @@ export const TestTFLitePage = () => {
   const TEST = async () => {
     const model = modelRef.value;
     if (!model || labels.value.length === 0) return;
-    const imageUri = await copyAssetToDocDir();
-    const tensorData = await preprocessLocalImage(imageUri);
+    const tensorData = await preprocessLocalImage();
     const outputshape = model.outputs[0].shape.slice(1);
-    const result = predictImageRN(model, labels.value, tensorData, outputshape, 0.1, 20);
-
+    const result = predictImageRN(model, labels.value, tensorData.data, outputshape, 0.1, 20);
     setResults(result);
   };
 

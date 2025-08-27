@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Button, StyleSheet, Text, View, ScrollView } from 'react-native';
 import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 import { useSharedValue } from 'react-native-reanimated';
-import { Camera, useCameraDevice, useFrameProcessor, PhotoFile } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
-import { loadLabels, predictImageRN, caculateScale } from '../services/scanService';
 import { useResizePlugin } from 'vision-camera-resize-plugin';
+import { loadLabels, predictImageRN } from '../services/index';
 
 export const ScanTFLitePage = () => {
   const device = useCameraDevice('back');
   const [hasPermission, setHasPermission] = useState(false);
   const [results, setResults] = useState<{ label: string; prob: number; box?: number[] }[]>([]);
   const [scanStatus, setScanStatus] = useState('');
+  const [trigger, setTrigger] = useState(true);
   const labels = useSharedValue<string[]>([]);
   const modelRef = useSharedValue<TensorflowModel | null>(null);
-  const scanning = useSharedValue(true);
+  const scanTrigger = useSharedValue(0);
 
   // 加載標籤
   useEffect(() => {
@@ -52,11 +53,9 @@ export const ScanTFLitePage = () => {
     (frame) => {
       'worklet';
       try {
-        if (!scanning.value) return;
+        if (scanTrigger.value === 0) return;
         const model = modelRef.value;
         if (!model || labels.value.length === 0) return;
-
-        const scale = caculateScale(frame);
         const tensorData = resize(frame, {
           scale: { width: 416, height: 416 },
           pixelFormat: 'rgb',
@@ -64,42 +63,42 @@ export const ScanTFLitePage = () => {
         });
         const outputshape = model.outputs[0].shape.slice(1);
         const result = predictImageRN(model, labels.value, tensorData, outputshape, 0.1, 20);
-        console.log(result);
         onInferenceResult(result);
         onScanStatus('掃描完成');
-        scanning.value = false;
       } catch (e) {
-        scanning.value = false;
-        console.error(e);
+        console.error('error:' + e);
       }
+        scanTrigger.value = 0; 
     },
-    [labels, modelRef],
+    [trigger],
   );
 
   // 開始即時掃描
   const startScan = () => {
     setScanStatus('掃描中...');
-    scanning.value = true;
+    scanTrigger.value += 1; 
+    setTrigger(!trigger);
   };
 
   if (!device || !hasPermission) return <Text>相機初始化中...</Text>;
 
   return (
     <View style={styles.container}>
-      <Camera
-        style={StyleSheet.absoluteFill}
-        device={device}
-        isActive={true} // 相機畫面常顯示
-        frameProcessor={frameProcessor}
-      />
-      <View style={styles.overlay}>
-        <Text style={styles.status}>{scanStatus}</Text>
-        {results.map((r, idx) => (
-          <Text key={idx} style={styles.result}>
-            {r.label} ({(r.prob * 100).toFixed(1)}%)
-          </Text>
-        ))}
-      </View>
+      <Camera style={StyleSheet.absoluteFill} device={device} isActive={true} frameProcessor={frameProcessor} />
+      <ScrollView
+        style={{ height: 300, borderWidth: 1, backgroundColor: 'rgba(0,0,0,0.6)', marginBottom: 10, padding: 5 }}
+      >
+        {results.map((r, idx) => {
+          const bb = r.box; // 假設是 [x, y, w, h]
+          return (
+            <View key={idx} style={{ marginBottom: 10, padding: 5, borderBottomWidth: 1, borderColor: '#ccc' }}>
+              <Text style={styles.result}>Object {idx + 1}:</Text>
+              <Text style={styles.result}>Label: {r.label}</Text>
+              <Text style={styles.result}>Confidence: {(r.prob * 100).toFixed(2)}%</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
       <Button title="開始掃描" onPress={startScan} />
     </View>
   );

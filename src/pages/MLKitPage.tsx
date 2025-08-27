@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
-import { runOCR } from '../services/scanService';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 
 export const ReactNativeMLKitPage = () => {
   const [hasPermission, setHasPermission] = useState(false);
@@ -16,7 +16,18 @@ export const ReactNativeMLKitPage = () => {
       setHasPermission(status === 'granted');
     })();
   }, []);
-
+/**
+ * 對指定圖片路徑執行 OCR，回傳所有文字
+ */
+ async function runOCR(photo: { path: string }): Promise<string> {
+  try {
+    const result = await TextRecognition.recognize(`file://${photo.path}`);
+    return result.blocks.map((block) => block.text).join('\n');
+  } catch (err) {
+    console.error('OCR failed:', err);
+    throw err;
+  }
+}
   const takePhotoAndRecognize = async () => {
     if (!cameraRef.current || isProcessing) return;
 

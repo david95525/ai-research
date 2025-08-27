@@ -1938,6 +1938,27 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@shopify/react-native-skia@npm:^2.2.4":
+  version: 2.2.4
+  resolution: "@shopify/react-native-skia@npm:2.2.4"
+  dependencies:
+    canvaskit-wasm: "npm:0.40.0"
+    react-reconciler: "npm:0.31.0"
+  peerDependencies:
+    react: ">=19.0"
+    react-native: ">=0.78"
+    react-native-reanimated: ">=3.0"
+  peerDependenciesMeta:
+    react-native:
+      optional: true
+    react-native-reanimated:
+      optional: true
+  bin:
+    setup-skia-web: scripts/setup-canvaskit.js
+  checksum: 10c0/8b273bf7db06a7e18cddb0b27f41e6de8b2a93e29be8bd70ff6fb03f3ecbc7610e793d2c7755afa0b02a98bd05f129efd6c958808d25e226276b067309449b2e
+  languageName: node
+  linkType: hard
+
 "@sinclair/typebox@npm:^0.27.8":
   version: 0.27.8
   resolution: "@sinclair/typebox@npm:0.27.8"
@@ -2101,6 +2122,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@webgpu/types@npm:0.1.21":
+  version: 0.1.21
+  resolution: "@webgpu/types@npm:0.1.21"
+  checksum: 10c0/74de9683b70064aeadcdd31381747650b323e7e2183fb38f90a35f1a79f80ad267c0a2ee5010c264befb3d31ad213dbdffa04897e2808f6b04feff8d66bc53e0
+  languageName: node
+  linkType: hard
+
 "@xmldom/xmldom@npm:^0.8.8":
   version: 0.8.10
   resolution: "@xmldom/xmldom@npm:0.8.10"
@@ -2159,15 +2187,16 @@ __metadata:
     "@react-native-vector-icons/material-design-icons": "npm:^12.3.0"
     "@react-navigation/bottom-tabs": "npm:^7.4.6"
     "@react-navigation/native": "npm:^7.1.17"
+    "@shopify/react-native-skia": "npm:^2.2.4"
     "@types/react": "npm:~19.0.10"
     buffer: "npm:^6.0.3"
     expo: "npm:~53.0.20"
+    expo-image-manipulator: "npm:^13.1.7"
     expo-status-bar: "npm:~2.2.3"
     react: "npm:19.0.0"
     react-native: "npm:0.79.5"
     react-native-fast-tflite: "npm:^1.6.1"
     react-native-fs: "npm:^2.20.0"
-    react-native-image-resizer: "npm:^1.4.5"
     react-native-reanimated: "npm:3.19.1"
     react-native-safe-area-context: "npm:5.4.0"
     react-native-vision-camera: "npm:^4.7.1"
@@ -2686,6 +2715,15 @@ __metadata:
   version: 1.0.30001735
   resolution: "caniuse-lite@npm:1.0.30001735"
   checksum: 10c0/1cb74221f16f8835c903770c1cf88fb73a07298b8398396a2b97570136e8f691053ee5840eb589fe34b4ede14ab828c9421d893a67e43c26ef91ab052813cb8c
+  languageName: node
+  linkType: hard
+
+"canvaskit-wasm@npm:0.40.0":
+  version: 0.40.0
+  resolution: "canvaskit-wasm@npm:0.40.0"
+  dependencies:
+    "@webgpu/types": "npm:0.1.21"
+  checksum: 10c0/dde817c0ef979a67afad4ac3adf31c03133af2592efec17f715a98508fdf801104fbf05af29723fb39b4d8b2798ce5306bb3cb5c062209d9d90a750430f3361d
   languageName: node
   linkType: hard
 
@@ -3291,6 +3329,26 @@ __metadata:
     expo: "*"
     react: "*"
   checksum: 10c0/00711fbdb380f076594b43caddf06ad6f70a5261caaccce564dabf01a02054f89987ac0367c96ad8cb38b4edbf904e99839ab2a446d7b57e7e84b29145da4ccd
+  languageName: node
+  linkType: hard
+
+"expo-image-loader@npm:~5.1.0":
+  version: 5.1.0
+  resolution: "expo-image-loader@npm:5.1.0"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/2897a2c3623f752cc277677b170ca9b3db826439641ccc93dcc3a94ece76dcbf084ecc108eddfebb42c34bcb339ef00996726995112c99561f262696c3e23300
+  languageName: node
+  linkType: hard
+
+"expo-image-manipulator@npm:^13.1.7":
+  version: 13.1.7
+  resolution: "expo-image-manipulator@npm:13.1.7"
+  dependencies:
+    expo-image-loader: "npm:~5.1.0"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/814a9b9cbbb9e9c78b6b8e939e815c57283423b7faa05b1f18032f482e1f857206e942bf2b08892b08e2c2cedc4e2799de1d8ee549b1205edb851bfb1f5030be
   languageName: node
   linkType: hard
 
@@ -5434,15 +5492,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-image-resizer@npm:^1.4.5":
-  version: 1.4.5
-  resolution: "react-native-image-resizer@npm:1.4.5"
-  peerDependencies:
-    react-native: ">=v0.40.0"
-  checksum: 10c0/13e7418d6ecacc0bf80b5be3ef8b9ca2991363579b48c8c8e7301a68de5120adfb7ea44c7ff1a37331a312ce09955e061ac73b583b092ec4436f46b63e46779b
-  languageName: node
-  linkType: hard
-
 "react-native-is-edge-to-edge@npm:1.1.7":
   version: 1.1.7
   resolution: "react-native-is-edge-to-edge@npm:1.1.7"
@@ -5578,6 +5627,17 @@ __metadata:
   bin:
     react-native: cli.js
   checksum: 10c0/e5398a99d01c8e4f016ea1ae2c5d51a2d5ae38a9e1edc6f66f562ec178293e025a1fb93d14163a38033d9bc1fae8dad01d5611127a9ed0019cf3cbc9618f4807
+  languageName: node
+  linkType: hard
+
+"react-reconciler@npm:0.31.0":
+  version: 0.31.0
+  resolution: "react-reconciler@npm:0.31.0"
+  dependencies:
+    scheduler: "npm:^0.25.0"
+  peerDependencies:
+    react: ^19.0.0
+  checksum: 10c0/97920e1866c7206e200c3920c133c2e85f62a3c54fd9bc4b83c10c558d83d98eb378caab4fe37498e0cc1b1b2665d898627f2ae2537b29c8ab295ec8abc0c580
   languageName: node
   linkType: hard
 
@@ -5796,7 +5856,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"scheduler@npm:0.25.0":
+"scheduler@npm:0.25.0, scheduler@npm:^0.25.0":
   version: 0.25.0
   resolution: "scheduler@npm:0.25.0"
   checksum: 10c0/a4bb1da406b613ce72c1299db43759526058fdcc413999c3c3e0db8956df7633acf395cb20eb2303b6a65d658d66b6585d344460abaee8080b4aa931f10eaafe
