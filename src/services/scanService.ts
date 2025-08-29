@@ -7,93 +7,129 @@
  */
 const extractBBFiltered = (
   output: Float32Array | number[],
-  outputShape: number[],
-  anchors: number[][],
-  probThreshold = 0.0001,
+  outputShape: number[], // [H, W, C] e.g. [13,13,95]
+  anchors: number[][], // 5 anchors
+  probThreshold = 0.3,
 ) => {
   'worklet';
   const [height, width, channels] = outputShape;
   const numAnchor = anchors.length;
   const numClass = channels / numAnchor - 5;
+  if (!Number.isInteger(numClass)) {
+    throw new Error(`Invalid output shape, got C=${channels}, A=${numAnchor}`);
+  }
+  const stride = 5 + numClass;
+
   const sigmoid = (x: number) => (x > 0 ? 1 / (1 + Math.exp(-x)) : Math.exp(x) / (1 + Math.exp(x)));
+
   const arr: number[] = Array.isArray(output) ? output : Array.from(output);
-  const results: { box: number[]; classIdx: number; score: number; obj: number }[] = [];
+  const results: { box: number[]; score: number[] }[] = [];
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       for (let a = 0; a < numAnchor; a++) {
-        const base = ((y * width + x) * numAnchor + a) * (numClass + 5);
+        // layout B: grouped-by-feature
+        const tx = arr[((y * width + x) * stride + 0) * numAnchor + a];
+        const ty = arr[((y * width + x) * stride + 1) * numAnchor + a];
+        const tw = arr[((y * width + x) * stride + 2) * numAnchor + a];
+        const th = arr[((y * width + x) * stride + 3) * numAnchor + a];
+        const tobj = arr[((y * width + x) * stride + 4) * numAnchor + a];
 
-        const cx = (sigmoid(arr[base + 0]) + x) / width;
-        const cy = (sigmoid(arr[base + 1]) + y) / height;
-
-        const w = (Math.exp(arr[base + 2]) * anchors[a][0]) / width;
-        const h = (Math.exp(arr[base + 3]) * anchors[a][1]) / height;
-
+        const cx = (sigmoid(tx) + x) / width;
+        const cy = (sigmoid(ty) + y) / height;
+        const w = (Math.exp(tw) * anchors[a][0]) / width;
+        const h = (Math.exp(th) * anchors[a][1]) / height;
         const box = [cx - w / 2, cy - h / 2, w, h];
-        const obj = sigmoid(arr[base + 4]);
 
-        const classLogits = arr.slice(base + 5, base + 5 + numClass);
+        const obj = sigmoid(tobj);
+
+        // class logits
+        const classLogits: number[] = [];
+        for (let k = 0; k < numClass; k++) {
+          classLogits.push(arr[((y * width + x) * stride + 5 + k) * numAnchor + a]);
+        }
+
+        // softmax
         const maxLogit = Math.max(...classLogits);
         const expScores = classLogits.map((v) => Math.exp(v - maxLogit));
         const sumExp = expScores.reduce((a, b) => a + b, 0);
-        const classProbs = expScores.map((v) => v / sumExp);
+        const classProbs = expScores.map((v) => (v / sumExp) * obj);
 
-        const bestClassProb = Math.max(...classProbs);
-        const classIdx = classProbs.indexOf(bestClassProb);
-        const score = obj * bestClassProb;
-        const result = { box, classIdx, score, obj };
-
-        if (score > probThreshold) results.push(result); // <-- 存 obj
+        // 判斷是否保留（用最大 class prob）
+        if (Math.max(...classProbs) > probThreshold) {
+          results.push({ box, score: classProbs });
+        }
       }
     }
   }
-  console.log(results);
   return results;
 };
+
 /**
  * NMS
  */
-const nonMaxSuppression = (boxes: number[][], scores: number[], iouThreshold = 0.45, maxDetections = 20) => {
+const nonMaxSuppression = (
+  boxes: number[][],
+  classProbs: number[][],
+  scoreThreshold: number,
+  iouThreshold: number,
+  maxDetections: number,
+) => {
   'worklet';
   const selectedBoxes: number[][] = [];
-  const selectedIndices: number[] = [];
-  const selectedScores: number[] = [];
+  const selectedClasses: number[] = [];
+  const selectedProbs: number[] = [];
 
-  const areas = boxes.map((b) => b[2] * b[3]);
+  const maxProbs = classProbs.map((p) => Math.max(...p));
+  const maxClasses = classProbs.map((p) => p.indexOf(Math.max(...p)));
 
-  let idxs = scores
-    .map((_, i) => i)
-    .filter((i) => scores[i] > 0)
-    .sort((a, b) => scores[b] - scores[a]);
+  const boxesCopy = boxes.slice();
+  const probsCopy = classProbs.map((p) => p.slice());
+  const maxProbsCopy = maxProbs.slice();
+  const maxClassesCopy = maxClasses.slice();
 
-  while (selectedBoxes.length < maxDetections && idxs.length > 0) {
-    const i = idxs.shift()!;
-    selectedBoxes.push(boxes[i]);
-    selectedIndices.push(i);
-    selectedScores.push(scores[i]);
+  while (selectedBoxes.length < maxDetections && boxesCopy.length > 0) {
+    let i = maxProbsCopy.indexOf(Math.max(...maxProbsCopy));
+    if (maxProbsCopy[i] < scoreThreshold) break;
 
-    for (let j = idxs.length - 1; j >= 0; j--) {
-      const [x1, y1, w1, h1] = boxes[i];
-      const [x2, y2, w2, h2] = boxes[idxs[j]];
+    selectedBoxes.push(boxesCopy[i]);
+    selectedClasses.push(maxClassesCopy[i]);
+    selectedProbs.push(maxProbsCopy[i]);
 
+    const [x1, y1, w1, h1] = boxesCopy[i];
+
+    for (let j = 0; j < boxesCopy.length; j++) {
+      if (j === i) continue;
+      const [x2, y2, w2, h2] = boxesCopy[j];
       const interW = Math.max(0, Math.min(x1 + w1, x2 + w2) - Math.max(x1, x2));
       const interH = Math.max(0, Math.min(y1 + h1, y2 + h2) - Math.max(y1, y2));
       const interArea = interW * interH;
-      const iou = interArea / (areas[i] + areas[idxs[j]] - interArea);
+      const unionArea = w1 * h1 + w2 * h2 - interArea;
+      const iou = interArea / unionArea;
 
-      if (iou > iouThreshold) idxs.splice(j, 1);
+      if (iou > iouThreshold) {
+        probsCopy[j][maxClassesCopy[i]] = 0;
+        maxProbsCopy[j] = Math.max(...probsCopy[j]);
+        maxClassesCopy[j] = probsCopy[j].indexOf(maxProbsCopy[j]);
+      }
     }
+
+    boxesCopy.splice(i, 1);
+    probsCopy.splice(i, 1);
+    maxProbsCopy.splice(i, 1);
+    maxClassesCopy.splice(i, 1);
   }
 
-  return { selectedBoxes, selectedIndices, selectedProbs: selectedScores };
+  return { selectedBoxes, selectedClasses, selectedProbs };
 };
+
 export const predictImageRN = (
   model: any,
   labels: string[],
   inputImage: Float32Array,
   outputShape: number[],
-  probThreshold = 0.1,
+  probThreshold = 0.5,
+  iouThreshold = 0.3,
   maxDetections = 20,
 ) => {
   'worklet';
@@ -106,28 +142,20 @@ export const predictImageRN = (
     [7.88, 3.53],
     [9.77, 9.17],
   ];
-
   const extractResults = extractBBFiltered(output, outputShape, ANCHORS, probThreshold);
-
   if (extractResults.length === 0) return [];
-  // 分組取最高分
-  const bestByClass: Record<number, (typeof extractResults)[0]> = {};
-  for (const r of extractResults) {
-    const score = r.score;
-    if (!bestByClass[r.classIdx] || score > bestByClass[r.classIdx].score) {
-      bestByClass[r.classIdx] = r;
-    }
-  }
-  // 轉回陣列
-  const filteredResults = Object.values(bestByClass);
 
-  // 準備 NMS
-  const boxes = filteredResults.map((r) => r.box);
-  const scores = filteredResults.map((r) => r.score);
-  const classes = filteredResults.map((r) => r.classIdx);
-  const { selectedBoxes, selectedIndices, selectedProbs } = nonMaxSuppression(boxes, scores, 0.45, 100);
-  const selectedClasses = selectedIndices.map((i) => classes[i]);
+  const boxes = extractResults.map((r) => r.box);
+  const classProbs = extractResults.map((r) => r.score);
 
+  const { selectedBoxes, selectedClasses, selectedProbs } = nonMaxSuppression(
+    boxes,
+    classProbs,
+    probThreshold,
+    iouThreshold,
+    maxDetections,
+  );
+  console.log(selectedClasses);
   return selectedBoxes.map((box, i) => ({
     label: labels[selectedClasses[i]],
     prob: selectedProbs[i],

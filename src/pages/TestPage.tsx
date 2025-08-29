@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Button, StyleSheet, Text, View } from 'react-native';
 import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 import { useSharedValue } from 'react-native-reanimated';
-import { loadLabels, predictImageRN, preprocessLocalImage } from '../services/index';
+import { loadLabels, predictImageRN, preprocessLocalImage, loadImage } from '../services/index';
+import { Canvas, Image, SkImage } from '@shopify/react-native-skia';
 export const TestTFLitePage = () => {
-  const [results, setResults] = useState<{ label: string; prob: number; box?: number[] }[]>([]);
+  const [results, setResults] = useState<{ label: string; prob: number; box: number[] }[]>([]);
+  const [image, setImage] = useState<SkImage | null>(null);
   const labels = useSharedValue<string[]>([]);
   const modelRef = useSharedValue<TensorflowModel | null>(null);
 
@@ -12,6 +14,8 @@ export const TestTFLitePage = () => {
     (async () => {
       const lbls = await loadLabels();
       labels.value = lbls;
+      const image = await loadImage();
+      setImage(image);
     })();
   }, []);
   useEffect(() => {
@@ -28,14 +32,17 @@ export const TestTFLitePage = () => {
   const TEST = async () => {
     const model = modelRef.value;
     if (!model || labels.value.length === 0) return;
-    const tensorData = await preprocessLocalImage();
+    const tensorData = await preprocessLocalImage(image);
     const outputshape = model.outputs[0].shape.slice(1);
-    const result = predictImageRN(model, labels.value, tensorData.data, outputshape, 0.1, 20);
+    const result = predictImageRN(model, labels.value, tensorData.data, outputshape, 0.3, 0.3, 100);
     setResults(result);
   };
 
   return (
     <View style={styles.container}>
+      <Canvas style={{ flex: 1 }}>
+        <Image image={image} fit="contain" x={0} y={0} width={256} height={256} />
+      </Canvas>
       <ScrollView
         style={{ height: 300, borderWidth: 1, backgroundColor: 'rgba(0,0,0,0.6)', marginBottom: 10, padding: 5 }}
       >
@@ -43,9 +50,11 @@ export const TestTFLitePage = () => {
           const bb = r.box; // 假設是 [x, y, w, h]
           return (
             <View key={idx} style={{ marginBottom: 10, padding: 5, borderBottomWidth: 1, borderColor: '#ccc' }}>
-              <Text style={styles.result}>Object {idx + 1}:</Text>
               <Text style={styles.result}>Label: {r.label}</Text>
               <Text style={styles.result}>Confidence: {(r.prob * 100).toFixed(2)}%</Text>
+              <Text style={styles.result}>
+                x:{r.box[0]}, y:{r.box[1]}, w:{r.box[2]}, h:{r.box[3]}
+              </Text>
             </View>
           );
         })}

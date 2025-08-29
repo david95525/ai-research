@@ -62,13 +62,13 @@ export const ScanTFLitePage = () => {
           dataType: 'float32',
         });
         const outputshape = model.outputs[0].shape.slice(1);
-        const result = predictImageRN(model, labels.value, tensorData, outputshape, 0.1, 20);
+        const result = predictImageRN(model, labels.value, tensorData, outputshape, 0.2, 0.45);
         onInferenceResult(result);
         onScanStatus('掃描完成');
       } catch (e) {
         console.error('error:' + e);
       }
-        scanTrigger.value = 0; 
+      scanTrigger.value = 0;
     },
     [trigger],
   );
@@ -76,7 +76,7 @@ export const ScanTFLitePage = () => {
   // 開始即時掃描
   const startScan = () => {
     setScanStatus('掃描中...');
-    scanTrigger.value += 1; 
+    scanTrigger.value += 1;
     setTrigger(!trigger);
   };
 

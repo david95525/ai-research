@@ -3,7 +3,7 @@ interface scale {
   width: number;
   height: number;
 }
-import { Skia, ColorType, AlphaType, ImageInfo } from '@shopify/react-native-skia';
+import { Skia, ColorType, AlphaType, ImageInfo, SkImage } from '@shopify/react-native-skia';
 
 /**
  * 載入 labels.txt，回傳每一行的陣列
@@ -39,14 +39,16 @@ export const caculateScale = (frame: any, defaultInputSize: number = 416 * 416):
   return { width: newWidth, height: newHeight };
 };
 
-const copyAssetToDocDir = async () => {
+export const loadImage = async () => {
   try {
-    const destPath = RNFS.DocumentDirectoryPath + '/scanbp.png';
-    const base64 = await RNFS.readFileAssets('scanbp.png', 'base64');
-    return base64;
+    const base64 = await RNFS.readFileAssets('scanbp.jpg', 'base64');
+    const data = Skia.Data.fromBase64(base64);
+    const image = Skia.Image.MakeImageFromEncoded(data);
+    if (!image) throw new Error('Failed to load image');
+    return image;
   } catch (err) {
     console.error('copyAssetToDocDir failed:', err);
-    return '';
+    throw new Error('Failed to load image');
   }
 };
 function calcResize32(origW: number, origH: number, target: number = 416) {
@@ -64,11 +66,12 @@ function calcResize32(origW: number, origH: number, target: number = 416) {
  * 1. 讀取本地 PNG 並做前處理（縮放 + 對齊 32 的倍數）
  * 回傳 Float32Array，值 normalized 到 [0,1]
  */
-export async function preprocessLocalImage(): Promise<{ data: Float32Array; width: number; height: number }> {
+export async function preprocessLocalImage(image: SkImage | null): Promise<{
+  data: Float32Array;
+  width: number;
+  height: number;
+}> {
   try {
-    const base64 = await copyAssetToDocDir();
-    const data = Skia.Data.fromBase64(base64);
-    const image = Skia.Image.MakeImageFromEncoded(data);
     if (!image) throw new Error('Failed to load image');
 
     const { newWidth, newHeight } = calcResize32(image.width(), image.height());
