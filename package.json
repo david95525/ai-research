@@ -21,6 +21,7 @@
     "expo": "~53.0.20",
     "expo-image-manipulator": "^13.1.7",
     "expo-status-bar": "~2.2.3",
+    "onnxruntime-react-native": "^1.22.0",
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-fast-tflite": "^1.6.1",

@@ -1,4 +1,4 @@
-import { HomePage, ReactNativeMLKitPage, ScanTFLitePage, DemoTFLitePage, TestTFLitePage } from '../pages/index';
+import { HomePage, ReactNativeMLKitPage, TFLiteScanPage, TFLitePage, OnnxPage } from '../pages/index';
 //  ReactNativeMLKitPage
 import { NavigationContainer } from '@react-navigation/native';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
@@ -23,14 +23,14 @@ export function getTabScreenOptions(routeName: string): BottomTabNavigationOptio
         case 'MLKitPage':
           iconName = 'text-recognition';
           break;
-        case 'ScanTFLitePage':
+        case 'TFLiteScanPage':
           iconName = 'scan-helper';
           break;
-        case 'DemoTFLitePage':
+        case 'TFLitePage':
           iconName = 'line-scan';
           break;
-        case 'TestTFLitePage':
-          iconName = 'circle';
+        case 'OnnxPage':
+          iconName = 'line-scan';
           break;
         default:
           iconName = 'circle';
@@ -51,9 +51,9 @@ export function CustomBottomTabNavigator() {
       >
         <Tab.Screen name="Home" component={HomePage} />
         <Tab.Screen name="MLKitPage" component={ReactNativeMLKitPage} />
-        <Tab.Screen name="ScanTFLitePage" component={ScanTFLitePage} />
-        <Tab.Screen name="TestTFLitePage" component={TestTFLitePage} />
-        <Tab.Screen name="DemoTFLitePage" component={DemoTFLitePage} />
+        <Tab.Screen name="TFLiteScanPage" component={TFLiteScanPage} />
+        <Tab.Screen name="TFLitePage" component={TFLitePage} />
+        <Tab.Screen name="OnnxPage" component={OnnxPage} />
       </Tab.Navigator>
     </NavigationContainer>
   );
