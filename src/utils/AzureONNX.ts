@@ -1,59 +1,11 @@
 import { Skia, ColorType, AlphaType, ImageInfo, SkImage, SkCanvas } from '@shopify/react-native-skia';
 import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+import { applyOrientation, hwcToChw } from './commonUtils';
 import { validateYoloOutput } from './tesUtils';
-function applyOrientation(canvas: SkCanvas, orientation: number, width: number, height: number) {
-  switch (orientation) {
-    case 2: // 水平翻轉
-      canvas.scale(-1, 1);
-      canvas.translate(-width, 0);
-      break;
-    case 3: // 旋轉 180
-      canvas.rotate(180, width / 2, height / 2);
-      break;
-    case 4: // 垂直翻轉
-      canvas.scale(1, -1);
-      canvas.translate(0, -height);
-      break;
-    case 5: // 垂直翻轉 + 旋轉90
-      canvas.rotate(90, width / 2, height / 2);
-      canvas.scale(1, -1);
-      break;
-    case 6: // 旋轉 90
-      canvas.rotate(90, width / 2, height / 2);
-      break;
-    case 7: // 水平翻轉 + 旋轉90
-      canvas.rotate(90, width / 2, height / 2);
-      canvas.scale(-1, 1);
-      break;
-    case 8: // 旋轉 270
-      canvas.rotate(270, width / 2, height / 2);
-      break;
-    default:
-      break; // orientation=1 → 不動
-  }
-}
-/**
- * HWC -> CHW 轉換
- */
-function hwcToChw(data: Float32Array, width: number, height: number): Float32Array {
-  const chw = new Float32Array(3 * width * height);
-  let offsetR = 0,
-    offsetG = width * height,
-    offsetB = 2 * width * height;
-  let ptr = 0;
-  for (let i = 0; i < height; i++) {
-    for (let j = 0; j < width; j++) {
-      chw[offsetR++] = data[ptr++];
-      chw[offsetG++] = data[ptr++];
-      chw[offsetB++] = data[ptr++];
-    }
-  }
-  return chw;
-}
 /**
  * React Native ONNX 前處理 (輸出 Tensor 可直接丟 session.run)
  */
-export async function preprocessOnnx(
+export async function preprocessAzureONNX(
   image: SkImage | null,
   orientation: number = 1,
   targetSize: number = 416,

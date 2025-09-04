@@ -1,5 +1,5 @@
 import * as RNFS from 'react-native-fs';
-import { Skia } from '@shopify/react-native-skia';
+import { Skia, SkCanvas } from '@shopify/react-native-skia';
 /**
  * 載入 labels.txt，回傳每一行的陣列
  */
@@ -38,3 +38,56 @@ export const calcResize32 = (origW: number, origH: number, target: number = 416)
   newH = 32 * Math.ceil(newH / 32);
   return { newWidth: newW, newHeight: newH };
 };
+export function applyOrientation(canvas: SkCanvas, orientation: number, width: number, height: number) {
+  const cx = width / 2;
+  const cy = height / 2;
+  switch (orientation) {
+    case 2: // 水平翻轉
+      canvas.translate(width, 0);
+      canvas.scale(-1, 1);
+      break;
+    case 3: // 旋轉 180
+      canvas.rotate(180, cx, cy);
+      break;
+    case 4: // 垂直翻轉
+      canvas.translate(0, height);
+      canvas.scale(1, -1);
+      break;
+    case 5: // 垂直翻轉 + 旋轉 90 CW
+      canvas.rotate(90, cx, cy);
+      canvas.translate(0, height);
+      canvas.scale(1, -1);
+      break;
+    case 6: // 旋轉 90 CW
+      canvas.rotate(90, cx, cy);
+      break;
+    case 7: // 水平翻轉 + 旋轉 90 CW
+      canvas.rotate(90, cx, cy);
+      canvas.scale(-1, 1);
+      canvas.translate(width, 0);
+      break;
+    case 8: // 旋轉 270 CW
+      canvas.rotate(270, cx, cy);
+      break;
+    default: // orientation=1 → 不動
+      break;
+  }
+}
+/**
+ * HWC -> CHW 轉換
+ */
+export function hwcToChw(data: Float32Array, width: number, height: number): Float32Array {
+  const chw = new Float32Array(3 * width * height);
+  let offsetR = 0,
+    offsetG = width * height,
+    offsetB = 2 * width * height;
+  let ptr = 0;
+  for (let i = 0; i < height; i++) {
+    for (let j = 0; j < width; j++) {
+      chw[offsetR++] = data[ptr++];
+      chw[offsetG++] = data[ptr++];
+      chw[offsetB++] = data[ptr++];
+    }
+  }
+  return chw;
+}
