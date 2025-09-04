@@ -17,6 +17,8 @@ export function validatePreprocess(
   console.log(`Original size: ${origW}x${origH}`);
   console.log(`Target size: ${targetSize}x${targetSize}`);
   console.log(`Padding: left=${padLeft}, top=${padTop}`);
+  const scale = Math.min(targetSize / origW, targetSize / origH);
+  console.log(`Scale: ${scale.toFixed(4)}`);
 
   // 檢查 pixel 範圍
   let minVal = 1,
@@ -40,14 +42,26 @@ export function validatePreprocess(
   }
 
   // Optional: visualize padding areas
+  const padRight = targetSize - padLeft - Math.round(origW * scale);
+  const padBottom = targetSize - padTop - Math.round(origH * scale);
+
   console.log('Expected non-zero area (after padding):');
+  console.log(`  X range: ${padLeft} ~ ${padLeft + Math.round(origW * scale) - 1}`);
+  console.log(`  Y range: ${padTop} ~ ${padTop + Math.round(origH * scale) - 1}`);
+  console.log(`  Padding right: ${padRight}, bottom: ${padBottom}`);
+
+  // Optional: check padding pixels (should be 0)
+  const checkPad = (x: number, y: number) => {
+    const idx = (y * targetSize + x) * 3;
+    return floatData[idx] === 0 && floatData[idx + 1] === 0 && floatData[idx + 2] === 0;
+  };
+  console.log('Padding check (corner pixels should be 0):');
+  console.log(`  Top-left: ${checkPad(0, 0)}, Top-right: ${checkPad(targetSize - 1, 0)}`);
   console.log(
-    `  X range: ${padLeft} ~ ${padLeft + Math.round(origW * Math.min(targetSize / origW, targetSize / origH))}`,
-  );
-  console.log(
-    `  Y range: ${padTop} ~ ${padTop + Math.round(origH * Math.min(targetSize / origW, targetSize / origH))}`,
+    `  Bottom-left: ${checkPad(0, targetSize - 1)}, Bottom-right: ${checkPad(targetSize - 1, targetSize - 1)}`,
   );
 }
+
 /**
  * 驗證 YOLO output 排列方式
  * @param output Float32Array | number[]

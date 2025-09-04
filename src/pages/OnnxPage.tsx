@@ -30,7 +30,7 @@ export const OnnxPage = () => {
     })();
   }, []);
 
-  const onnxTest = async () => {
+  const azureModel = async () => {
     if (!model || labels.length === 0) return;
     // 前處理
     const { tensor, origW, origH } = await preprocessOnnx(image);
@@ -42,7 +42,18 @@ export const OnnxPage = () => {
     const result = await predictOnnx(model, feeds, labels, origW, origH);
     setResults(result);
   };
+  const customModel = async () => {
+    if (!model || labels.length === 0) return;
+    // 前處理
+    const { tensor, origW, origH } = await preprocessOnnx(image);
 
+    // 準備 feeds (使用模型 input 名稱)
+    const inputName = model.inputNames[0]; // 或手動確認
+    const feeds = { [inputName]: tensor };
+    // 執行推理
+    const result = await predictOnnx(model, feeds, labels, origW, origH);
+    setResults(result);
+  };
   return (
     <View style={styles.container}>
       <Canvas style={{ flex: 1 }}>
@@ -55,6 +66,7 @@ export const OnnxPage = () => {
           const bb = r.box; // 假設是 [x, y, w, h]
           return (
             <View key={idx} style={{ marginBottom: 10, padding: 5, borderBottomWidth: 1, borderColor: '#ccc' }}>
+              <Text style={styles.result}>{idx}</Text>
               <Text style={styles.result}>Label: {r.label}</Text>
               <Text style={styles.result}>Confidence: {(r.prob * 100).toFixed(2)}%</Text>
               <Text style={styles.result}>
@@ -64,7 +76,8 @@ export const OnnxPage = () => {
           );
         })}
       </ScrollView>
-      <Button title="azure model分析" onPress={onnxTest} />
+      <Button title="azure model分析" onPress={azureModel} />
+      <Button title="custom model分析" onPress={customModel} />
     </View>
   );
 };

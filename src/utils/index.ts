@@ -1,3 +1,3 @@
 export * from './commonUtils';
-export * from './tfliteUtils';
-export * from "./onnxUtils";
+export * from './AzureTFLite';
+export * from "./AzureONNX";

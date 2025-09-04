@@ -30,12 +30,24 @@ export const TFLitePage = () => {
   }, []);
 
   const TEST = async () => {
-    const model = modelRef.value;
-    if (!model || labels.value.length === 0) return;
-    const tensorData = await preprocessTflite(image);
-    const outputshape = model.outputs[0].shape.slice(1);
-    const result = predictTflite(model, labels.value, tensorData.data, outputshape, 0.3, 0.3, 100);
-    setResults(result);
+    try {
+      const model = modelRef.value;
+      if (!model || labels.value.length === 0) return;
+      const pre = await preprocessTflite(image);
+      const outputshape = model.outputs[0].shape.slice(1);
+      const result = predictTflite(model, labels.value, pre.data, outputshape, {
+        width: pre.width,
+        height: pre.height,
+        origW: pre.origW,
+        origH: pre.origH,
+        scale: pre.scale,
+        padLeft: pre.padLeft,
+        padTop: pre.padTop,
+      });
+      setResults(result);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -50,6 +62,7 @@ export const TFLitePage = () => {
           const bb = r.box; // 假設是 [x, y, w, h]
           return (
             <View key={idx} style={{ marginBottom: 10, padding: 5, borderBottomWidth: 1, borderColor: '#ccc' }}>
+              <Text style={styles.result}>{idx}</Text>
               <Text style={styles.result}>Label: {r.label}</Text>
               <Text style={styles.result}>Confidence: {(r.prob * 100).toFixed(2)}%</Text>
               <Text style={styles.result}>
@@ -59,7 +72,7 @@ export const TFLitePage = () => {
           );
         })}
       </ScrollView>
-      <Button title="開始分析" onPress={TEST} />
+      <Button title="tflite分析" onPress={TEST} />
     </View>
   );
 };

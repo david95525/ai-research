@@ -62,8 +62,8 @@ export const TFLiteScanPage = () => {
           dataType: 'float32',
         });
         const outputshape = model.outputs[0].shape.slice(1);
-        const result = predictTflite(model, labels.value, tensorData, outputshape, 0.2, 0.45);
-        onInferenceResult(result);
+        // const result = predictTflite(model, labels.value, tensorData, outputshape, 0.2, 0.45);
+        // onInferenceResult(result);
         onScanStatus('掃描完成');
       } catch (e) {
         console.error('error:' + e);
@@ -92,6 +92,7 @@ export const TFLiteScanPage = () => {
           const bb = r.box; // 假設是 [x, y, w, h]
           return (
             <View key={idx} style={{ marginBottom: 10, padding: 5, borderBottomWidth: 1, borderColor: '#ccc' }}>
+              <Text style={styles.result}>{idx}</Text>
               <Text style={styles.result}>Object {idx + 1}:</Text>
               <Text style={styles.result}>Label: {r.label}</Text>
               <Text style={styles.result}>Confidence: {(r.prob * 100).toFixed(2)}%</Text>

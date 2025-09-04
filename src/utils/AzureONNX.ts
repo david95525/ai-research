@@ -1,5 +1,6 @@
 import { Skia, ColorType, AlphaType, ImageInfo, SkImage, SkCanvas } from '@shopify/react-native-skia';
 import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+import { validateYoloOutput } from './tesUtils';
 function applyOrientation(canvas: SkCanvas, orientation: number, width: number, height: number) {
   switch (orientation) {
     case 2: // 水平翻轉
@@ -56,14 +57,7 @@ export async function preprocessOnnx(
   image: SkImage | null,
   orientation: number = 1,
   targetSize: number = 416,
-): Promise<{
-  tensor: Tensor;
-  width: number;
-  height: number;
-  floatData: Float32Array;
-  origW: number;
-  origH: number;
-}> {
+): Promise<{ tensor: Tensor; width: number; height: number; floatData: Float32Array; origW: number; origH: number }> {
   if (!image) throw new Error('Failed to load image');
 
   const origW = image.width();
@@ -112,9 +106,9 @@ export async function preprocessOnnx(
   const floatData = new Float32Array(targetSize * targetSize * 3);
   let ptr = 0;
   for (let i = 0; i < pixels.length; i += 4) {
-    floatData[ptr++] = pixels[i] / 255; // R
-    floatData[ptr++] = pixels[i + 1] / 255; // G
-    floatData[ptr++] = pixels[i + 2] / 255; // B
+    floatData[ptr++] = pixels[i + 2]; // B
+    floatData[ptr++] = pixels[i + 1]; // G
+    floatData[ptr++] = pixels[i]; // R
   }
 
   // HWC -> CHW
@@ -125,44 +119,15 @@ export async function preprocessOnnx(
   return { tensor, width: targetSize, height: targetSize, floatData, origW, origH };
 }
 
-/**
- * 將 YOLO 預測的 bounding boxes 從模型輸入尺寸轉回原始影像座標，並 clip 到影像邊界
- * @param boxes - [[x, y, w, h]] 以 targetSize 座標
- * @param origWidth - 原始影像寬
- * @param origHeight - 原始影像高
- * @param targetSize - 模型輸入尺寸 (default: 416)
- * @returns [[x, y, w, h]] 在原始影像座標
- */
-export function mapBoxesToOriginal(
-  boxes: number[][],
-  origWidth: number,
-  origHeight: number,
-  targetSize = 416,
-): number[][] {
-  const scale = Math.min(targetSize / origWidth, targetSize / origHeight);
-  const newW = Math.round(origWidth * scale);
-  const newH = Math.round(origHeight * scale);
-  const padLeft = Math.floor((targetSize - newW) / 2);
-  const padTop = Math.floor((targetSize - newH) / 2);
-
-  return boxes.map((b) => {
-    const x1 = Math.max(0, (b[0] * targetSize - padLeft) / scale);
-    const y1 = Math.max(0, (b[1] * targetSize - padTop) / scale);
-    const w = (b[2] * targetSize) / scale;
-    const h = (b[3] * targetSize) / scale;
-    const x2 = Math.min(origWidth, x1 + w);
-    const y2 = Math.min(origHeight, y1 + h);
-    return [x1, y1, x2 - x1, y2 - y1];
-  });
-}
 /** Sigmoid */
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
-/** 提取 bounding boxes */
-export const extractBB = (
+
+/** 將 YOLO ONNX 輸出提取成 bounding boxes */
+export const ONNXextractBB = (
   output: Float32Array | number[],
   outputShape: number[], // [H, W, C] e.g., [13, 13, 95]
   anchors: number[][], // [[0.573, 0.677], ...]
-  probThreshold = 0.05,
+  probThreshold = 0.3,
 ) => {
   const [height, width, channels] = outputShape;
   const numAnchor = anchors.length;
@@ -175,7 +140,6 @@ export const extractBB = (
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       for (let a = 0; a < numAnchor; a++) {
-        // featureGrouped layout: 每個 anchor 的 5+numClass channel是連續排列
         const base = a * (5 + numClass) + y * width * channels + x * channels;
 
         const tx = arr[base + 0];
@@ -186,26 +150,30 @@ export const extractBB = (
 
         const cx = (sigmoid(tx) + x) / width;
         const cy = (sigmoid(ty) + y) / height;
-        const w = (Math.exp(tw) * anchors[a][0]) / width;
-        const h = (Math.exp(th) * anchors[a][1]) / height;
-        const box = [cx - w / 2, cy - h / 2, w, h];
+        const w = Math.min((Math.exp(tw) * anchors[a][0]) / width, 1);
+        const h = Math.min((Math.exp(th) * anchors[a][1]) / height, 1);
+
+        const x1 = Math.max(0, cx - w / 2);
+        const y1 = Math.max(0, cy - h / 2);
+        const x2 = Math.min(1, cx + w / 2);
+        const y2 = Math.min(1, cy + h / 2);
+
+        // 過濾過小或過大框
+        if (x2 - x1 < 0.01 || y2 - y1 < 0.01 || x2 - x1 > 0.95 || y2 - y1 > 0.95) continue;
 
         const objProb = sigmoid(tobj);
 
-        // class logits
+        // class logits -> softmax
         const classLogits: number[] = [];
-        for (let k = 0; k < numClass; k++) {
-          classLogits.push(arr[base + 5 + k]);
-        }
+        for (let k = 0; k < numClass; k++) classLogits.push(arr[base + 5 + k]);
 
-        // softmax
         const maxLogit = Math.max(...classLogits);
         const expScores = classLogits.map((v) => Math.exp(v - maxLogit));
         const sumExp = expScores.reduce((a, b) => a + b, 0);
         const classProbs = expScores.map((v) => (v / sumExp) * objProb);
 
         if (Math.max(...classProbs) > probThreshold) {
-          results.push({ box, score: classProbs });
+          results.push({ box: [x1, y1, x2 - x1, y2 - y1], score: classProbs });
         }
       }
     }
@@ -215,12 +183,12 @@ export const extractBB = (
 };
 
 /** Non-Maximum Suppression */
-const nonMaxSuppression = (
+export const nonMaxSuppression = (
   boxes: number[][],
   classProbs: number[][],
-  scoreThreshold: number,
-  iouThreshold: number,
-  maxDetections: number,
+  scoreThreshold = 0.3,
+  iouThreshold = 0.45,
+  maxDetections = 100,
 ) => {
   const selectedBoxes: number[][] = [];
   const selectedClasses: number[] = [];
@@ -269,6 +237,95 @@ const nonMaxSuppression = (
   return { selectedBoxes, selectedClasses, selectedProbs };
 };
 
+/**
+ * 將 YOLO 預測的 bounding boxes 從模型輸入尺寸轉回原始影像座標，並 clip 到影像邊界
+ * @param boxes - [[x, y, w, h]] 以 targetSize 座標
+ * @param origWidth - 原始影像寬
+ * @param origHeight - 原始影像高
+ * @param targetSize - 模型輸入尺寸 (default: 416)
+ * @returns [[x, y, w, h]] 在原始影像座標
+ */
+export function mapBoxesToOriginal(
+  boxes: number[][],
+  origWidth: number,
+  origHeight: number,
+  targetSize = 416,
+): number[][] {
+  const scale = Math.min(targetSize / origWidth, targetSize / origHeight);
+  const newW = origWidth * scale;
+  const newH = origHeight * scale;
+  const padLeft = (targetSize - newW) / 2;
+  const padTop = (targetSize - newH) / 2;
+
+  return boxes.map(([x, y, w, h]) => {
+    const x1 = (x * targetSize - padLeft) / scale;
+    const y1 = (y * targetSize - padTop) / scale;
+    const w1 = (w * targetSize) / scale;
+    const h1 = (h * targetSize) / scale;
+
+    const finalX1 = Math.max(0, x1);
+    const finalY1 = Math.max(0, y1);
+    const finalX2 = Math.min(origWidth, finalX1 + w1);
+    const finalY2 = Math.min(origHeight, finalY1 + h1);
+
+    return [finalX1, finalY1, finalX2 - finalX1, finalY2 - finalY1];
+  });
+}
+/** 篩選同 label 且重疊的 box，只保留最大機率 */
+function filterBoxesPerLabelMax(boxes: number[][], labels: string[], probs: number[], iouThreshold: number = 0.3) {
+  // 定義文字類 label
+  const textLabels = new Set(['microlife', 'SYS', 'DIA', 'PUL']);
+
+  // 依 prob 由高到低排序
+  const candidates = boxes
+    .map((b, i) => ({ box: b, label: labels[i], prob: probs[i] }))
+    .sort((a, b) => b.prob - a.prob);
+
+  const finalBoxes: number[][] = [];
+  const finalLabels: string[] = [];
+  const finalProbs: number[] = [];
+
+  const iou = (boxA: number[], boxB: number[]) => {
+    const [ax, ay, aw, ah] = boxA;
+    const [bx, by, bw, bh] = boxB;
+    const x1 = Math.max(ax, bx);
+    const y1 = Math.max(ay, by);
+    const x2 = Math.min(ax + aw, bx + bw);
+    const y2 = Math.min(ay + ah, by + bh);
+    const interW = Math.max(0, x2 - x1);
+    const interH = Math.max(0, y2 - y1);
+    const interArea = interW * interH;
+    if (interArea === 0) return 0;
+    const unionArea = aw * ah + bw * bh - interArea;
+    return interArea / unionArea;
+  };
+
+  // 追蹤已經保留的文字 label
+  const textLabelUsed = new Set<string>();
+
+  for (const cand of candidates) {
+    // 如果是文字類 label，只保留一個
+    if (textLabels.has(cand.label) && textLabelUsed.has(cand.label)) continue;
+
+    let overlapped = false;
+    for (let j = 0; j < finalBoxes.length; j++) {
+      if (cand.label === finalLabels[j] && iou(cand.box, finalBoxes[j]) > iouThreshold) {
+        overlapped = true;
+        break;
+      }
+    }
+
+    if (!overlapped) {
+      finalBoxes.push(cand.box);
+      finalLabels.push(cand.label);
+      finalProbs.push(cand.prob);
+      if (textLabels.has(cand.label)) textLabelUsed.add(cand.label);
+    }
+  }
+
+  return { finalBoxes, finalLabels, finalProbs };
+}
+
 /** ONNX 推理 + 後處理 */
 export const predictOnnx = async (
   model: InferenceSession,
@@ -277,15 +334,15 @@ export const predictOnnx = async (
   origWidth: number,
   origHeight: number,
   targetSize = 416,
-  probThreshold = 0.3,
+  probThreshold = 0.35,
   iouThreshold = 0.45,
-  maxDetections = 20,
+  maxDetections = 100,
 ) => {
   try {
     const output = await model.run(feeds);
     const outputTensor: Tensor = output[model.outputNames[0]];
     const outputArray = new Float32Array(outputTensor.data as Float32Array);
-    console.log('Output Tensor dims:', outputTensor.dims, 'size:', outputArray.length);
+    const [N, C, H, W] = outputTensor.dims;
 
     const ANCHORS = [
       [0.573, 0.677],
@@ -294,19 +351,12 @@ export const predictOnnx = async (
       [7.88, 3.53],
       [9.77, 9.17],
     ];
-    const [N, C, H, W] = outputTensor.dims;
-    console.log(`NCHW: N=${N}, C=${C}, H=${H}, W=${W}`);
 
-    // 提取 bounding boxes
-    const extracted = extractBB(Array.from(outputArray), [H, W, C], ANCHORS, probThreshold);
-    console.log('Extracted bounding boxes:', extracted.length);
-
+    const extracted = ONNXextractBB(Array.from(outputArray), [H, W, C], ANCHORS, probThreshold);
     if (!extracted || extracted.length === 0) return [];
 
     const boxes = extracted.map((r) => r.box);
     const classProbs = extracted.map((r) => r.score);
-
-    // NMS
     const { selectedBoxes, selectedClasses, selectedProbs } = nonMaxSuppression(
       boxes,
       classProbs,
@@ -314,19 +364,27 @@ export const predictOnnx = async (
       iouThreshold,
       maxDetections,
     );
-
-    // 轉回原圖座標
     const boxesOnOriginal = mapBoxesToOriginal(selectedBoxes, origWidth, origHeight, targetSize);
-
-    const results = boxesOnOriginal.map((box, i) => ({
+    // labels
+    const selectedLabels = selectedClasses.map((i) => labels[i]);
+    // per-label NMS 擴充
+    const { finalBoxes, finalLabels, finalProbs } = filterBoxesPerLabelMax(
+      boxesOnOriginal,
+      selectedLabels,
+      selectedProbs,
+    );
+    const results = finalBoxes.map((box, i) => ({
+      label: finalLabels[i],
+      prob: finalProbs[i],
+      box,
+    }));
+    const resultorigin = boxesOnOriginal.map((box, i) => ({
       label: labels[selectedClasses[i]],
       prob: selectedProbs[i],
       box,
     }));
-
+    console.log('origin results count:', resultorigin.length);
     console.log('Final results count:', results.length);
-    console.log('Sample results:', results.slice(0, 5));
-
     return results;
   } catch (err) {
     console.error('predictOnnx error:', err);
