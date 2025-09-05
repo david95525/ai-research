@@ -2189,6 +2189,7 @@ __metadata:
     "@react-navigation/native": "npm:^7.1.17"
     "@shopify/react-native-skia": "npm:^2.2.4"
     "@types/react": "npm:~19.0.10"
+    base64-js: "npm:^1.5.1"
     buffer: "npm:^6.0.3"
     expo: "npm:~53.0.20"
     expo-image-manipulator: "npm:^13.1.7"

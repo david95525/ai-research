@@ -54,7 +54,7 @@ export async function preprocessAzureONNX(
   const pixels = snapshot.readPixels(0, 0, imageInfo);
   if (!pixels) throw new Error('Failed to read pixels');
 
-  // Uint8 -> Float32 (RGB)
+  // Uint8 -> Float32 (BGR)
   const floatData = new Float32Array(targetSize * targetSize * 3);
   let ptr = 0;
   for (let i = 0; i < pixels.length; i += 4) {
@@ -279,7 +279,7 @@ function filterBoxesPerLabelMax(boxes: number[][], labels: string[], probs: numb
 }
 
 /** ONNX 推理 + 後處理 */
-export const predictOnnx = async (
+export const predictAzureOnnx = async (
   model: InferenceSession,
   feeds: { [x: string]: Tensor },
   labels: string[],

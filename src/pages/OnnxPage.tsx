@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, Button, StyleSheet, Text, View } from 'react-native';
-import { loadLabels, preprocessAzureONNX, preprocessCustomONNX, predictOnnx, predictCustomOnnx, loadImage, OutputData } from '../utils/index';
+import { loadLabels, preprocessAzureONNX, predictAzureOnnx, predictCustomOnnx, loadImage, OutputData } from '../utils/index';
 import { Canvas, Image, SkImage } from '@shopify/react-native-skia';
 import { InferenceSession } from 'onnxruntime-react-native';
 import RNFS from 'react-native-fs';
@@ -9,7 +9,6 @@ export const OnnxPage = () => {
   const [customs, setCustoms] = useState<OutputData | null>(null);
   const [image, setImage] = useState<SkImage | null>(null);
   const [azuremodel, setAzureModel] = useState<InferenceSession | null>(null);
-  const [custommodel, setCustomModel] = useState<InferenceSession | null>(null);
   const [labels, setLabels] = useState<string[]>([]);
   useEffect(() => {
     (async () => {
@@ -26,10 +25,6 @@ export const OnnxPage = () => {
         await RNFS.copyFileAssets('onnxmodel.onnx', azuremodelPath);
         const azureModel = await InferenceSession.create(azuremodelPath);
         setAzureModel(azureModel);
-        const best1Path = RNFS.DocumentDirectoryPath + '/best1.onnx';
-        await RNFS.copyFileAssets('best1.onnx', best1Path);
-        const best1Model = await InferenceSession.create(best1Path);
-        setCustomModel(best1Model);
       } catch (err) {
         console.error('模型載入失敗', err);
       }
@@ -41,18 +36,16 @@ export const OnnxPage = () => {
     if (!azuremodel || labels.length === 0) return;
     // 前處理
     const { tensor, origW, origH } = await preprocessAzureONNX(image);
-
     // 準備 feeds (使用模型 input 名稱)
     const inputName = azuremodel.inputNames[0]; // 或手動確認
     const feeds = { [inputName]: tensor };
     // 執行推理
-    const result = await predictOnnx(azuremodel, feeds, labels, origW, origH);
+    const result = await predictAzureOnnx(azuremodel, feeds, labels, origW, origH);
     setResults(result);
   };
   const customModel = async () => {
     setResults([]);
-    if (!custommodel || labels.length === 0) return;
-    const result = await predictCustomOnnx(custommodel, image);
+    const result = await predictCustomOnnx(image);
     setCustoms(result.data);
   };
   return (
@@ -77,11 +70,11 @@ export const OnnxPage = () => {
           })}
         {customs && (
           <View style={{ marginBottom: 10, padding: 5, borderBottomWidth: 1, borderColor: '#ccc' }}>
-            <Text style={styles.result}>{customs.number['order1'] ?? 0}</Text>
-            <Text style={styles.result}>{customs.number['order2'] ?? 0}</Text>
-            <Text style={styles.result}>{customs.number['order3'] ?? 0}</Text>
-            <Text style={styles.result}>{customs.icon.gentle == 1 ? 'gentle' : 'not gentle'}</Text>
-            <Text style={styles.result}>{customs.text[0] ?? ''}</Text>
+            <Text style={styles.result}>SYS:{customs.number['order1'] ?? 0}</Text>
+            <Text style={styles.result}>DIA:{customs.number['order2'] ?? 0}</Text>
+            <Text style={styles.result}>PUL:{customs.number['order3'] ?? 0}</Text>
+            <Text style={styles.result}>Gentle:{customs.icon.gentle}</Text>
+            <Text style={styles.result}>Text: {customs.text['label1'] ?? ''}</Text>
           </View>
         )}
       </ScrollView>

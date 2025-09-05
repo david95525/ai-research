@@ -3,10 +3,12 @@ import { InferenceSession, Tensor } from 'onnxruntime-react-native';
 import { applyOrientation, hwcToChw } from './commonUtils';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { writeFile, DocumentDirectoryPath } from 'react-native-fs';
+import RNFS from 'react-native-fs';
+import { fromByteArray } from 'base64-js';
 /**
  * React Native ONNX 完整 Custom model 前處理
  */
-export async function preprocessCustomONNX(
+async function preprocessCustomONNX(
   image: SkImage | null,
   orientation: number = 1,
   targetSize: number = 640,
@@ -205,26 +207,78 @@ function nonMaxSuppressionJS(boxes: number[][], scores: number[], iouThreshold: 
   }
   return selected;
 }
+/**
+ * 裁切 EN box 並進行 OCR，結果寫入 existingData
+ * @param enBoxes 要裁切的 box 陣列 [[x1,y1,x2,y2], ...]
+ * @param image SkImage 圖片物件
+ * @param imageName 對應 existingData 的 key
+ * @param existingData OCR 結果存放物件
+ */
+export async function cropAndRecognizeENBox(
+  enBoxes: number[][],
+  image: SkImage,
+  imageName: string,
+  existingData: {
+    [imageName: string]: {
+      Text: string[];
+    };
+  },
+) {
+  const MIN_OCR_SIZE = 32; // ML Kit 最小尺寸
+  if (!enBoxes.length || !image) return;
+  // 找最上方的 EN box
+  const [x1, y1, x2, y2] = enBoxes.reduce((prev, curr) => (curr[1] < prev[1] ? curr : prev));
+  // 計算寬高
+  let width = x2 - x1;
+  let height = y2 - y1;
+  // 如果寬或高小於最小值，增加 padding
+  const padX = Math.max(0, MIN_OCR_SIZE - width) / 2;
+  const padY = Math.max(0, MIN_OCR_SIZE - height) / 2;
+
+  const cropX1 = Math.max(0, x1 - padX);
+  const cropY1 = Math.max(0, y1 - padY);
+  const cropX2 = Math.min(image.width(), x2 + padX);
+  const cropY2 = Math.min(image.height(), y2 + padY);
+
+  width = cropX2 - cropX1;
+  height = cropY2 - cropY1;
+  if (width < MIN_OCR_SIZE || height < MIN_OCR_SIZE) {
+    console.warn('Box too small for OCR even after padding, skipping:', [x1, y1, x2, y2]);
+    return;
+  }
+  // 裁切圖片
+  const croppedSurface = Skia.Surface.MakeOffscreen(width, height);
+  if (!croppedSurface) return;
+  const canvas = croppedSurface.getCanvas();
+  canvas.clear(Skia.Color('white'));
+  const paint = Skia.Paint();
+  canvas.drawImageRect(image, { x: cropX1, y: cropY1, width, height }, { x: 0, y: 0, width, height }, paint);
+  const croppedSnapshot = croppedSurface.makeImageSnapshot();
+  const pngBytes = croppedSnapshot.encodeToBytes(); // Uint8Array
+  if (!pngBytes || !pngBytes.length) return;
+  // 轉 Base64 並寫檔
+  const base64String = fromByteArray(pngBytes);
+  const filePath = `${DocumentDirectoryPath}/en_crop_${imageName}.png`;
+  await writeFile(filePath, base64String, 'base64');
+  try {
+    const result = await TextRecognition.recognize(`file://${filePath}`);
+    const textOnly = result.blocks.map((block) => block.text);
+    // 將結果寫入 existingData
+    if (!existingData[imageName]) existingData[imageName] = { Text: [] };
+    existingData[imageName].Text.push(...textOnly);
+  } catch (err) {
+    console.error('OCR failed:', err);
+  }
+}
 interface IconData {
   ihb: number;
   cuff: number;
   gentle: number;
 }
-
-interface ImageData {
-  Text: string[];
-  ICON: IconData;
-  numbers: string[];
-}
-
 export interface OutputData {
   icon: IconData;
   text: Record<string, string>;
   number: Record<string, string>;
-}
-
-interface Output {
-  data: OutputData;
 }
 
 interface BoxResult {
@@ -237,14 +291,21 @@ interface BoxResult {
  */
 const Labels = ['text', 'Cuff1', 'Cuff0', 'IHB', 'EN', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Gentle'];
 export const predictCustomOnnx = async (
-  model: InferenceSession,
   image: SkImage | null,
   labels: string[] = Labels,
   targetSize: number = 640,
   probThreshold = 0.5,
   iouThreshold: number = 0.45,
-): Promise<Output> => {
+): Promise<{
+  data: OutputData;
+}> => {
   try {
+    if (!image) throw new Error('Image not ready');
+    //load model
+    const best1Path = RNFS.DocumentDirectoryPath + '/best1.onnx';
+    await RNFS.copyFileAssets('best1.onnx', best1Path);
+    const model = await InferenceSession.create(best1Path);
+
     if (!model || labels.length === 0) throw new Error('Model or labels not ready');
 
     // 前處理
@@ -353,6 +414,11 @@ export const predictCustomOnnx = async (
       [origH, origW],
     );
     // 組結果
+    interface ImageData {
+      Text: string[];
+      ICON: IconData;
+      numbers: string[];
+    }
     const existingData: Record<string, ImageData> = {};
     const results: BoxResult[] = [];
     const enBoxes: [number, number, number, number][] = [];
@@ -404,40 +470,8 @@ export const predictCustomOnnx = async (
         results.push({ label, confidence: scores[i], bbox: [x1, y1, x2, y2] });
       }
     }
-    // if (enBoxes.length > 0 && image) {
-    //   const [x1, y1, x2, y2] = enBoxes.reduce((prev, curr) => (curr[1] < prev[1] ? curr : prev)); // 最上方的 EN box
-
-    //   // 裁切圖片 (Skia -> PNG bytes)
-    //   const snapshot = image; // 假設 image 已是 SkImage
-    //   const width = x2 - x1;
-    //   const height = y2 - y1;
-
-    //   const croppedSurface = Skia.Surface.MakeOffscreen(width, height);
-    //   if (croppedSurface) {
-    //     const canvas = croppedSurface.getCanvas();
-    //     canvas.clear(Skia.Color('white'));
-    //     const paint = Skia.Paint();
-    //     canvas.drawImageRect(snapshot, { x: x1, y: y1, width, height }, { x: 0, y: 0, width, height }, paint);
-
-    //     const croppedSnapshot = croppedSurface.makeImageSnapshot();
-    //     const pngBytes = croppedSnapshot.encodeToBytes(); // Uint8Array
-
-    //     if (pngBytes && pngBytes.length > 0) {
-    //       const filePath = `${DocumentDirectoryPath}/en_crop.png`;
-    //       await writeFile(filePath, Buffer.from(pngBytes).toString('base64'), 'base64');
-
-    //       try {
-    //         const result = await TextRecognition.recognize(`file://${filePath}`);
-    //         const textOnly = result.blocks.map((block) => block.text);
-    //         existingData[imageName].Text.push(...textOnly);
-    //         console.log('EN box crop coords:', [x1, y1, x2, y2]);
-    //         console.log('OCR result:', textOnly);
-    //       } catch (err) {
-    //         console.error('OCR failed:', err);
-    //       }
-    //     }
-    //   }
-    // }
+    // OCR
+    await cropAndRecognizeENBox(enBoxes, image, imageName, existingData);
     // numbers 合併
     const groupedBoxes = groupByYLevel(results);
     const numbers: string[] = [];
@@ -451,16 +485,16 @@ export const predictCustomOnnx = async (
       }
     }
     existingData[imageName].numbers.push(...numbers);
-
     // 最終輸出
-    const outputs: Output = {
+    const outputs: {
+      data: OutputData;
+    } = {
       data: {
         icon: existingData[imageName].ICON,
         text: {},
         number: {},
       },
     };
-
     existingData[imageName].Text.forEach((text: string, idx: number) => {
       outputs.data.text[`label${idx + 1}`] = text;
     });
