@@ -5,6 +5,7 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { writeFile, DocumentDirectoryPath } from 'react-native-fs';
 import RNFS from 'react-native-fs';
 import { fromByteArray } from 'base64-js';
+import { IconData, OutputData, BoxResult } from './types';
 /**
  * React Native ONNX 完整 Custom model 前處理
  */
@@ -269,22 +270,6 @@ export async function cropAndRecognizeENBox(
   } catch (err) {
     console.error('OCR failed:', err);
   }
-}
-interface IconData {
-  ihb: number;
-  cuff: number;
-  gentle: number;
-}
-export interface OutputData {
-  icon: IconData;
-  text: Record<string, string>;
-  number: Record<string, string>;
-}
-
-interface BoxResult {
-  label: string;
-  confidence: number;
-  bbox: [number, number, number, number];
 }
 /**
  * ONNX 推理 + 輸出整理 (NMS 前)

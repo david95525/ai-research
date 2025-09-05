@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, Button, StyleSheet, Text, View } from 'react-native';
-import { loadLabels, preprocessAzureONNX, predictAzureOnnx, predictCustomOnnx, loadImage, OutputData } from '../utils/index';
+import { loadLabels, preprocessAzureONNX, predictAzureOnnx, predictCustomOnnx, loadImage } from '../utils/index';
+import { OutputData } from '../utils/types';
 import { Canvas, Image, SkImage } from '@shopify/react-native-skia';
 import { InferenceSession } from 'onnxruntime-react-native';
 import RNFS from 'react-native-fs';
